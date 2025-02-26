@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vertical Jump Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #000; /* Чёрный фон для всей страницы */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            background: #000; /* Чёрный фон игры */
+            width: 100%;
+            max-width: 800px;
+            height: 100vh;
+            max-height: 600px;
+        }
+        #menu, #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white; /* Белый фон для меню и геймовера */
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            z-index: 10;
+            text-align: center;
+            color: red; /* Красные буквы */
+        }
+        #menu h1, #gameOver h1, #gameOver p {
+            color: red; /* Красные буквы для заголовков и текста */
+        }
+        #menu button, #gameOver button {
+            display: block;
+            margin: 10px auto;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        #menu button:hover, #gameOver button:hover {
+            background: #45a049;
+        }
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 24px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 5px 15px;
+            border-radius: 5px;
+            z-index: 10;
+            color: red; /* Красный цвет для счёта */
+        }
+    </style>
+</head>
+<body>
+    <div id="menu">
+        <h1>Vertical Jump</h1>
+        <button onclick="startGame()">Start</button>
+    </div>
+    <div id="gameOver" style="display: none;">
+        <h1>Game Over</h1>
+        <p id="finalScore">Your Score: 0</p>
+        <button onclick="restartGame()">Restart</button>
+    </div>
+    <div id="score" style="display: none;">Score: 0</div>
+    <canvas id="gameCanvas" style="display: none;"></canvas>
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        let animationFrameId = null;
+
+        // Адаптация размеров канваса
+        function resizeCanvas() {
+            canvas.width = Math.min(800, window.innerWidth * 0.9);
+            canvas.height = Math.min(600, window.innerHeight * 0.9);
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        let score = 0;
+        let platforms = [];
+        const player = {
+            x: canvas.width / 2 - 15,
+            y: canvas.height - 50,
+            radius: 15,
+            dy: 0,
+            dx: 0,
+            gravity: 0.3,
+            jumpPower: -15,
+            speed: 5,
+            canJump: true,
+            onGround: false
+        };
+
+        function generatePlatforms() {
+            platforms = [];
+            platforms.push({ x: canvas.width / 2 - 75, y: canvas.height - 20, width: 150, height: 10 });
+            for (let i = 1; i < 8; i++) {
+                platforms.push({
+                    x: Math.random() * (canvas.width - 150),
+                    y: canvas.height - i * 80,
+                    width: 150,
+                    height: 10
+                });
+            }
+        }
+
+        function drawPlayer() {
+            ctx.fillStyle = "#98FF98"; /* Салатовый цвет для круга */
+            ctx.beginPath();
+            ctx.arc(player.x + player.radius, player.y + player.radius, player.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawPlatforms() {
+            ctx.fillStyle = "#F5F5DC"; /* Бежевый цвет для платформ */
+            platforms.forEach(plat => {
+                ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+            });
+        }
+
+        function update() {
+            player.dy += player.gravity;
+            player.y += player.dy;
+            player.x += player.dx;
+
+            // Ограничиваем движение по горизонтали
+            if (player.x - player.radius < 0) player.x = player.radius;
+            if (player.x + player.radius > canvas.width) player.x = canvas.width - player.radius;
+
+            // Прокрутка вверх
+            if (player.y < canvas.height / 3 && player.dy < 0) {
+                platforms.forEach(plat => plat.y -= player.dy);
+                player.y -= player.dy;
+                score += Math.floor(Math.abs(player.dy) / 10);
+                document.getElementById("score").innerText = `Score: ${score}`;
+            }
+
+            // Удаляем платформы за пределами экрана и добавляем новые
+            platforms = platforms.filter(plat => plat.y < canvas.height + 20);
+            while (platforms.length < 8) {
+                platforms.push({
+                    x: Math.random() * (canvas.width - 150),
+                    y: platforms[platforms.length - 1].y - (60 + Math.random() * 40),
+                    width: 150,
+                    height: 10
+                });
+            }
+
+            // Проверка столкновения с платформами
+            let wasOnGround = player.onGround;
+            player.onGround = false;
+
+            platforms.forEach(plat => {
+                if (
+                    player.y + player.radius * 2 >= plat.y &&
+                    player.y + player.radius * 2 <= plat.y + plat.height + 5 &&
+                    player.x + player.radius > plat.x &&
+                    player.x - player.radius < plat.x + plat.width &&
+                    player.dy > 0
+                ) {
+                    player.y = plat.y - player.radius * 2;
+                    player.dy = player.jumpPower;
+                    player.onGround = true;
+                    player.canJump = true;
+                }
+            });
+
+            if (!player.onGround && wasOnGround) {
+                player.canJump = false;
+            }
+
+            // Конец игры
+            if (player.y > canvas.height) {
+                endGame();
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawPlayer();
+            drawPlatforms();
+            update();
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        // Управление
+        window.addEventListener("keydown", (e) => {
+            if (e.code === "ArrowLeft") player.dx = -player.speed;
+            if (e.code === "ArrowRight") player.dx = player.speed;
+            if (e.code === "Space" && player.canJump) {
+                player.dy = player.jumpPower;
+                player.canJump = false;
+            }
+            if (e.code === "Enter" && document.getElementById("gameOver").style.display === "block") {
+                restartGame();
+            }
+        });
+
+        window.addEventListener("keyup", (e) => {
+            if (e.code === "ArrowLeft" || e.code === "ArrowRight") player.dx = 0;
+        });
+
+        function startGame() {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            document.getElementById("menu").style.display = "none";
+            canvas.style.display = "block";
+            document.getElementById("score").style.display = "block";
+            score = 0;
+            player.x = canvas.width / 2 - 15;
+            player.y = canvas.height - 50;
+            player.dy = 0;
+            player.dx = 0;
+            player.onGround = true;
+            player.canJump = true;
+            generatePlatforms();
+            animate();
+        }
+
+        function endGame() {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            document.getElementById("gameOver").style.display = "block";
+            document.getElementById("finalScore").innerText = `Your Score: ${score}`;
+            canvas.style.display = "none";
+            document.getElementById("score").style.display = "none";
+        }
+
+        function restartGame() {
+            document.getElementById("gameOver").style.display = "none";
+            startGame();
+        }
+    </script>
+</body>
+</html>
